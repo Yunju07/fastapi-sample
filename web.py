@@ -131,7 +131,7 @@ origins = [
 ]
 
 class Message(BaseModel):
-    user_input: str
+    text: str
 
 #LoadApiKey()
 app = FastAPI()
@@ -159,7 +159,7 @@ async def index(request: Request):
 
 @app.post("/send-message/")
 async def send_message(request: Request, message: Message):
-    user_text = message.user_input
+    user_text = message.text
 
     data_to_return = {}
 
