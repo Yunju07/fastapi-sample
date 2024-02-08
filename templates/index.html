@@ -4,119 +4,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>채팅봇</title>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            background-color: #2c3e50;
-            color: #ecf0f1;
-        }
-
-        #chat-container {
-            width: 70%;
-            margin: 0 auto;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-
-        #chat-top-bar {
-            width: 100%;
-            display: flex;
-            align-items: center;
-            background-color: #3498db;
-            padding: 10px;
-            border-top-left-radius: 8px;
-            border-top-right-radius: 8px;
-        }
-
-        .custom-button {
-            background-color: #2c3e50;
-            color: #ecf0f1;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-right: 8px;
-        }
-
-        #chat-box {
-            width: 100%;
-            height: 60%;
-            overflow-y: scroll;
-            margin-bottom: 20px;
-            border: 2px solid #34495e;
-            border-radius: 8px;
-            padding: 10px;
-        }
-
-        .message-container {
-            display: flex;
-            justify-content: flex-start;
-            margin-bottom: 10px;
-            cursor: pointer;
-        }
-
-        .user-message-container {
-            justify-content: flex-end;
-        }
-
-        .message-bubble {
-            padding: 10px;
-            border-radius: 8px;
-            max-width: 70%;
-            word-wrap: break-word;
-        }
-
-        .user-message-bubble {
-            background-color: #3498db;
-            color: white;
-        }
-
-        .bot-message-bubble {
-            background-color: #34495e;
-            color: white;
-        }
-
-        #input-box {
-            width: 100%;
-            display: flex;
-            justify-content: space-between;
-            margin-top: 20px;
-        }
-
-        #user-input {
-            flex: 1;
-            padding: 8px;
-            border: none;
-            border-radius: 4px;
-            margin-right: 8px;
-            background-color: #2c3e50;
-            color: #ecf0f1;
-        }
-
-        #send-button {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-    </style>
+    <link rel="stylesheet" href="static\css\styles.css">
 </head>
 <body>
-    <div id="chat-container">
-        <div id="chat-top-bar">
-            <!-- 3개의 버튼 추가 -->
-            <button class="custom-button" onclick="sendMessage('버튼1을 선택했습니다.')">버튼1</button>
-            <button class="custom-button" onclick="sendMessage('버튼2를 선택했습니다.')">버튼2</button>
-            <button class="custom-button" onclick="sendMessage('버튼3을 선택했습니다.')">버튼3</button>
+    <div id="sidebar">
+        <div class="title">인공지능 업무도우미 💡</div>
+        <div class="menu-item">
+            ⚙️ 설정
+            <ul>
+                <li class="sub-menu" onclick="openModal('share-modal')">Confluence</li>
+                <li class="sub-menu" onclick="openModal('email-modal')">Email</li>
+                <li class="sub-menu" onclick="openModal('calendar-modal')">Calender</li>
+            </ul>
         </div>
+        <div class="menu-item">
+            📂 기능
+            <ul>
+                <li class="sub-menu">보고서 초안 작성</li>
+                <li class="sub-menu">회의록 초안 작성</li>
+                <li class="sub-menu">미팅 일정 생성</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div id="chat-container">
         <div id="chat-box"></div>
         <div id="input-box">
             <input type="text" id="user-input" placeholder="메시지를 입력하세요" onkeydown="handleKeydown(event)">
@@ -124,30 +35,164 @@
         </div>
     </div>
 
+   <!-- 모달 다이얼로그들 -->
+   <div id="share-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('share-modal')">&times;</span>
+            <h2>Confluence 정보</h2>
+            <label for="access-token">개인용 엑세스 토큰</label><br>
+            <input type="text" id="access-token" name="access-token"><br><br>
+            <label for="login-account">로그인 계정</label><br>
+            <input type="text" id="login-account" name="login-account"><br><br><br><br>
+            <button id="save-button" onclick="saveShare()">Save</button>
+        </div>
+    </div>
+
+    <div id="email-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('email-modal')">&times;</span>
+            <h2>Email 정보</h2>
+            <label for="email-id">아이디</label><br>
+            <input type="text" id="email-id" name="email-id"><br><br>
+            <label for="email-password">패스워드</label><br>
+            <input type="text" id="email-password" name="email-password"><br><br><br><br>
+            <button id="save-button" onclick="saveEmail()">Save</button>
+        </div>
+    </div>
+
+    <div id="calendar-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('calendar-modal')">&times;</span>
+            <h2>Calendar</h2>
+            <br><br>
+            <button id="save-button" onclick="saveCalendar()">Save</button>
+        </div>
+    </div>
+
     <script>
-        function sendMessage(message) {
+        async function sendMessage() {
+            var userInput = document.getElementById('user-input').value;
+            if (userInput.trim() !== '') {
+                var chatBox = document.getElementById('chat-box');
+                var userMessageContainer = document.createElement('div');
+                userMessageContainer.classList.add('message-container', 'user-message-container');
+                
+                var userMessageBubble = document.createElement('div');
+                userMessageBubble.classList.add('message-bubble', 'user-message-bubble');
+                userMessageBubble.textContent = userInput;
+
+                userMessageContainer.appendChild(userMessageBubble);
+                chatBox.appendChild(userMessageContainer);
+
+                // 대기 중인 메시지를 표시
+                var waitingMessageContainer = document.createElement('div');
+                waitingMessageContainer.id = 'waiting-message';
+                waitingMessageContainer.classList.add('message-container', 'waiting-message-container', 'message-animation');
+                var waitingMessageBubble = document.createElement('div');
+                waitingMessageBubble.classList.add('message-bubble', 'waiting-message-bubble');
+                waitingMessageBubble.textContent = '. . .';
+                waitingMessageContainer.appendChild(waitingMessageBubble);
+                chatBox.appendChild(waitingMessageContainer);
+
+                // 스크롤을 항상 최하단으로 조정
+                chatBox.scrollTop = chatBox.scrollHeight;
+
+                document.getElementById('user-input').value = '';
+                
+                // http post 요청
+                var response = await fetch('/send-message/',{
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ user_input: userInput })
+                });
+                var data = await response.json();
+
+                displayBotMessage(data.message);
+                
+                chatBox.removeChild(waitingMessageContainer);
+            }
+        }
+        function displayBotMessage(message) {
             var chatBox = document.getElementById('chat-box');
-            var userMessageContainer = document.createElement('div');
-            userMessageContainer.classList.add('message-container', 'user-message-container');
+            var botMessageContainer = document.createElement('div');
+            botMessageContainer.classList.add('message-container', 'bot-message-container');
 
-            var userMessageBubble = document.createElement('div');
-            userMessageBubble.classList.add('message-bubble', 'user-message-bubble');
-            userMessageBubble.textContent = message;
+            var botMessageBubble = document.createElement('div');
+            botMessageBubble.classList.add('message-bubble', 'bot-message-bubble');
+            botMessageBubble.textContent = message;
 
-            userMessageContainer.appendChild(userMessageBubble);
-            chatBox.appendChild(userMessageContainer);
+            botMessageContainer.appendChild(botMessageBubble);
+            chatBox.appendChild(botMessageContainer);
 
             // 스크롤을 항상 최하단으로 조정
             chatBox.scrollTop = chatBox.scrollHeight;
-
-            // 여기서 챗봇 로직을 추가하면 됩니다.
+            // 대기 중인 메시지가 있으면 삭제
+            var waitingMessage = document.getElementById('waiting-message');
+            if (waitingMessage) {
+                chatBox.removeChild(waitingMessage);
+            }
         }
 
         function handleKeydown(event) {
             if (event.key === 'Enter') {
-                sendMessage(document.getElementById('user-input').value);
-                document.getElementById('user-input').value = '';
+                sendMessage();
             }
+        }
+        // 모달 열기
+        function openModal(modalId) {
+            var modal = document.getElementById(modalId);
+            modal.style.display = "block";
+        }
+
+        // 모달 닫기
+        function closeModal(modalId) {
+            var modal = document.getElementById(modalId);
+            modal.style.display = "none";
+        }
+
+        // 사용자가 모달 외부를 클릭했을 때 모달 닫기
+        window.onclick = function(event) {
+            var modals = document.getElementsByClassName('modal');
+            for (var i = 0; i < modals.length; i++) {
+                var modal = modals[i];
+                if (event.target == modal) {
+                    modal.style.display = "none";
+                }
+            }
+        }
+        // 설정 정보 저장 메소드
+        function saveShare() {
+            var accessToken = document.getElementById('access-token').value;
+            var loginAccount = document.getElementById('login-account').value;
+
+            console.log("Access Token:", accessToken);
+            console.log("Login Account:", loginAccount);
+
+            // 필요한 저장 또는 처리 로직을 추가하세요.
+
+            // 모달 닫기
+            closeModal('share-modal');
+        }
+        function saveEmail() {
+            var id = document.getElementById('email-id').value;
+            var pw = document.getElementById('email-password').value;
+
+            console.log("Email Id:", id);
+            console.log("Email Password:", pw);
+            
+
+            // 필요한 저장 또는 처리 로직을 추가하세요.
+
+            // 모달 닫기
+            closeModal('email-modal');
+        }
+        function saveCalendar() {
+            // 필요한 저장 또는 처리 로직을 추가하세요.
+
+            // 모달 닫기
+            closeModal('calendar-modal');
         }
     </script>
 </body>
