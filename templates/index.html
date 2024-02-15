@@ -20,9 +20,11 @@
         <div class="menu-item">
             📂 기능
             <ul>
+                <li class="sub-menu" onclick="openModal('file-upload-modal')">문서번역</li>
                 <li class="sub-menu">보고서 초안 작성</li>
                 <li class="sub-menu">회의록 초안 작성</li>
                 <li class="sub-menu">미팅 일정 생성</li>
+                <li class="sub-menu">이메일</li>
             </ul>
         </div>
     </div>
@@ -69,6 +71,29 @@
         </div>
     </div>
 
+    <div id="report-alert-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('report-alert-modal')">&times;</span>
+            <p>보고서 작성을 위한 정보가 모두 입력되지 않았습니다. 정보를 입력해주세요.</p>
+        </div>
+    </div>
+
+    <div id="file-upload-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('file-upload-modal')">&times;</span>
+            <h2>문서 번역기</h2>
+            <h4>파일 업로드</h4>
+            <input type="file" id="file-upload" name="file-upload" accept=".txt, .pdf, .doc, .docx"><br>
+            <h4>번역할 언어</h4>
+            <select id="language-select">
+                <option value="en">영어</option>
+                <option value="ko">한국어</option>
+                <option value="ja">일본어</option>
+            </select><br><br><br>
+            <button id="save-button" onclick="uploadFile()">Upload</button>
+        </div>
+    </div>
+
     <script>
         async function sendMessage() {
             var userInput = document.getElementById('user-input').value;
@@ -105,13 +130,17 @@
                     body: JSON.stringify({ text: userInput })
                 });
                 var data = await response.json();
-
-                displayBotMessage(data.message);
                 
+                if('image' in data) {
+                    displayImage(data.image, data.message+'\n\n')
+                }
+                else{
+                    displayMessage(data.message);
+                }
                 chatBox.removeChild(waitingMessageContainer);
             }
         }
-        function displayBotMessage(message) {
+        function displayMessage(message) {
             var chatBox = document.getElementById('chat-box');
             var botMessageContainer = document.createElement('div');
             botMessageContainer.classList.add('message-container', 'bot-message-container');
@@ -130,6 +159,21 @@
             if (waitingMessage) {
                 chatBox.removeChild(waitingMessage);
             }
+        }
+        function displayImage(image, text) {
+            var chatBox = document.getElementById('chat-box');
+            
+            var messageBubble = document.createElement('div');
+            messageBubble.classList.add('message-bubble', 'bot-message-bubble');
+            messageBubble.textContent = text;
+
+            var imageContainer = document.createElement('img');
+            imageContainer.src = image
+            
+            messageBubble.appendChild(imageContainer);
+            chatBox.appendChild(messageBubble);
+
+            chatBox.scrollTop = chatBox.scrollHeight;
         }
 
         function handleKeydown(event) {
@@ -191,6 +235,91 @@
             // 모달 닫기
             closeModal('calendar-modal');
         }
+        // 기능 함수
+
+        // Confluence 정보를 입력했는지 확인하는 함수
+        function isConfluenceInfoEntered() {
+            var accessToken = document.getElementById('access-token').value;
+            var loginAccount = document.getElementById('login-account').value;
+            return accessToken.trim() !== '' && loginAccount.trim() !== '';
+        }
+
+        //파일업로드
+        async function uploadFile() {
+            var fileInput = document.getElementById('file-upload');
+            var file = fileInput.files[0];
+            var language = document.getElementById('language-select').value;
+            
+            // 모달 닫기
+            closeModal('file-upload-modal');
+
+            if (file) {
+                var chatBox = document.getElementById('chat-box');
+                var messageContainer = document.createElement('div');
+                messageContainer.classList.add('message-container', 'bot-message-container');
+                
+                var messageBubble = document.createElement('div');
+                messageBubble.classList.add('message-bubble', 'bot-message-bubble');
+                messageBubble.textContent = "문서를 번역하고 있습니다";
+
+                messageContainer.appendChild(messageBubble);
+                chatBox.appendChild(messageContainer);
+
+                // 대기 중인 메시지를 표시
+                var waitingMessageContainer = document.createElement('div');
+                waitingMessageContainer.id = 'waiting-message';
+                waitingMessageContainer.classList.add('message-container', 'waiting-message-bubble');
+                waitingMessageContainer.innerHTML = '<div id="spinner"></div>';
+                chatBox.appendChild(waitingMessageContainer);
+
+                // 스크롤을 항상 최하단으로 조정
+                chatBox.scrollTop = chatBox.scrollHeight;
+
+                var formData = new FormData();
+                formData.append('file', file);
+                formData.append('language', language);
+                
+                // http post 요청
+                var response = await fetch('/translate-document/',{
+                    method: 'POST',
+                    body: formData
+                });
+                var data = await response.json();
+                console.log(data.result)
+                displayMessageWithDownloadLink("번역이 완료되었습니다", data.download_url)
+
+                chatBox.removeChild(waitingMessageContainer);
+            }
+            function displayMessageWithDownloadLink(message, downloadUrl) {
+                var chatBox = document.getElementById('chat-box');
+                var botMessageContainer = document.createElement('div');
+                botMessageContainer.classList.add('message-container', 'bot-message-container');
+
+                var botMessageBubble = document.createElement('div');
+                botMessageBubble.classList.add('message-bubble', 'bot-message-bubble');
+                botMessageBubble.textContent = message;
+
+                // 번역된 파일 다운로드 링크 생성
+                var downloadLink = document.createElement('a');
+                downloadLink.textContent = "번역된 파일 다운로드";
+                downloadLink.href = downloadUrl;
+                downloadLink.download = "translated_file.txt"; // 다운로드될 파일 이름 지정
+
+                botMessageBubble.appendChild(downloadLink);
+                botMessageContainer.appendChild(botMessageBubble);
+                chatBox.appendChild(botMessageContainer);
+
+                // 스크롤을 항상 최하단으로 조정
+                chatBox.scrollTop = chatBox.scrollHeight;
+                // 대기 중인 메시지가 있으면 삭제
+                var waitingMessage = document.getElementById('waiting-message');
+                if (waitingMessage) {
+                    chatBox.removeChild(waitingMessage);
+                }
+            }
+
+        }    
+        
     </script>
 </body>
 </html>
