@@ -169,7 +169,7 @@ input[type="text"] {
     border: none; 
     outline: none; 
     width: 300px; 
-    height: 20px;       
+    height: 25px;       
     border-radius: 5px;
     background-color: #e3e3e3; 
 } 
@@ -177,12 +177,12 @@ input[type="password"] {
     border: none; 
     outline: none; 
     width: 300px; 
-    height: 20px;       
+    height: 25px;       
     border-radius: 5px;
     background-color: #e3e3e3; 
 } 
 .input-container {
-    display: flex; 
+    display: flex;
     justify-content: space-between; 
 }
 #save-button {
@@ -200,4 +200,15 @@ input[type="password"] {
 .title{
     color:rgb(195, 190, 190);
     margin-bottom: 10px;
+}
+.email-select {
+    margin-top: 7px;
+    width: 300px; 
+    height: 30px;     
+    font-size: 14px; 
+}
+.arrow-button {
+    background-color: #d0d7dbd2;
+    color: white;
+    border: none;
 }

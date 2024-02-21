@@ -1,23 +1,25 @@
-
+from datetime import datetime
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import Optional
 from fastapi import UploadFile
 from docx import Document
 from PyPDF2 import PdfFileReader
 from pdf2image import convert_from_bytes
 from openai import OpenAI
 import nltk
-import fitz
-from PIL import Image
 import base64
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 
+import email
+from email_module.nasa_mailbox import mailbox
+from email_module.nasa_utils import NASA_UTILS 
+
+from calender_module.make_event import make_event
 
 import io
 import os
@@ -25,8 +27,12 @@ import re
 import requests
 import json
 
+# 각종 파일경로 및 폴더
 CONVERSATION_FILE_PATH = "conversation.json"
-# nltk.download('punkt')
+
+TRANSLATE_TEXT_FILE = "/download/translated_file.txt"
+
+email_md_folder_name = "email_tmp_md"
 
 ###########################
 ## 대화 history 관련 함수 ##
@@ -66,19 +72,18 @@ async def translate_file(file: UploadFile, language) :
     """
     업로드된 파일에서 텍스트를 추출하는 함수
     :param file: 업로드된 파일 객체
-    :return: 추출된 텍스트 (업로드된 파일이 텍스트가 아닌 경우 None 반환)
     """
     # 파일 확장자 확인
     file_extension = file.filename.split(".")[-1].lower()
 
     if file_extension in ["txt", "doc", "docx", "pdf"]:
-        file_content = file.read()
+        file_content = await file.read()
 
         # txt
         if file_extension == "txt":
             file_content = file_content.decode("utf-8")
             text = split_text(file_content)
-            return text_file_translate(text)
+            return text_file_translate(text, language)
 
         # # doc, docx
         # elif file_extension in ["doc", "docx"]:
@@ -141,14 +146,20 @@ def text_file_translate(split, language):
             model="gpt-4-1106-preview",
         )
         result += chat_completion.choices[0].message.content
+        result += "\n"
         
     data_to_return = {}
     data_to_return['language'] = language
 
     # 번역 결과 파일로 저장
-    with open("/download/translated_textfile.txt",'w') as file:
+    current_script_path = os.path.abspath(__file__)
+    parent_directory = os.path.dirname(current_script_path)
+    os.chdir(parent_directory)
+
+    with open("download/translated_textfile.txt",'w', encoding='utf-8') as file:
         file.write(result)
-    data_to_return['download_url'] = "/download/translated_textfile.txt"
+
+    data_to_return['download_url'] = "../download/translated_textfile.txt";
 
     return data_to_return
 
@@ -157,7 +168,11 @@ def pdf_file_tanslate(data, language):
         api_key=os.environ['OPENAI_API_KEY'],
     )
 
-    create_filename = "/download//translated_pdffile.pdf"
+    current_script_path = os.path.abspath(__file__)
+    parent_directory = os.path.dirname(current_script_path)
+    os.chdir(parent_directory)
+
+    create_filename = "/download/translated_pdffile.pdf"
     c = canvas.Canvas(create_filename, pagesize=letter)
 
     for page in data:
@@ -206,12 +221,99 @@ def pdf_file_tanslate(data, language):
 
     data_to_return = {}
     data_to_return['language'] = language
-    data_to_return['download_url'] = "/download//translated_pdffile.pdf"
+    data_to_return['download_url'] = get_file_url(parent_directory+r"\download\translated_pdffile.txt")
 
     return data_to_return
-####
+
+# 파일의 URL을 생성하는 함수
+def get_file_url(file_path: str):
+    # 파일의 절대 경로를 상대 경로로 변환
+    relative_path = os.path.relpath(file_path, os.getcwd())
+    
+    # URL 생성
+    file_url = f"/{relative_path}"
+
+    return file_url
+
+# md 파일 추출
+def read_markdown_tag(filename, tag_name):
+    os.chdir('email_tmp_md')
+    try:
+        with open(filename, 'r', encoding='utf-8') as file:
+            for line in file:
+                if f"<{tag_name}>" in line:
+                    # 태그가 시작되는 줄을 찾으면 다음 줄부터 해당 태그의 내용을 읽음
+                    content = []
+                    for line in file:
+                        if f"-----end of a email-----" in line:
+                            break
+                        content.append(line.strip())
+                    return '\n'.join(content)
+    except FileNotFoundError:
+        print(f"파일 '{filename}'을(를) 찾을 수 없습니다.")
+    except Exception as e:
+        print(f"파일을 읽는 중 오류가 발생했습니다: {e}")
+
+######################
+## e-mail 관련 함수 ##
+######################
+
+def clean_markup(data):
+    from bs4 import BeautifulSoup
+    return BeautifulSoup(data, "lxml").text
+
+def get_markup_tag(data):
+    if not data:
+        return
+
+    set_data = set()
+
+    for item in data.split(' '):
+        a = re.search('<(.+?)>', item)
+        if a:
+            set_data.add(a.group(1))
+    return set_data
+
+def remove_multiple_spaces(string):
+    return re.sub(r'\s+', ' ', string)
+
+
+## 기타 함수
+def post_calender_openai(body):
+    formatted_date = datetime.now().strftime('%Y-%m-%d')
+    content = f'''<Input>
+    {body}
+
+    <Output>
+    - Json format that include below informations
+    - Make summary as short as possible
+    - dateTime format: '2024-02-10T00:00:00+09:00'
+    - Summary in Korean
+    - Today is {formatted_date}
+
+    summary:
+    location:
+    dateTime:
+    '''
+
+    client = OpenAI(
+        api_key=os.environ['OPENAI_API_KEY'],
+    )
+
+    chat_completion = client.chat.completions.create(
+        messages = [{
+            "role": "user", 
+            "content": content
+        }],
+        model="gpt-4-1106-preview",
+    )
+
+    return chat_completion.choices[0].message.content
   
 def LoadApiKey():
+    current_script_path = os.path.abspath(__file__)
+    os.chdir(os.path.dirname(current_script_path))
+
     with open("openai_api_key.txt") as f:
         data = f.read()
 
@@ -236,7 +338,8 @@ def base64_data_in_text(text):
     data = re.findall(data_pattern, text)
     return data
 
-def GptMultimodal(text):     
+def GptMultimodal(text): 
+    LoadApiKey()    
     data_base64 = base64_data_in_text(text)
     
     if data_base64:
@@ -291,7 +394,6 @@ def GptMultimodal(text):
                         }
                     ]
                 }
-
             )
             message = load_conversation()
         
@@ -335,7 +437,7 @@ origins = [
 class Message(BaseModel):
     text: str
 
-#LoadApiKey()
+LoadApiKey()
 app = FastAPI()
 
 
@@ -380,8 +482,105 @@ async def translate_document(request: Request):
     uploaded_file = form['file']
     language = form['language']
     
-    result = await translate_file(uploaded_file, language)
+    data_to_return = await translate_file(uploaded_file, language)
 
-      
-    return 
+    return data_to_return
+
+@app.post("/load-emails/")
+async def load_emails(request: Request):
+    form = await request.form()
+    email_id = form['id']
+    email_pw = form['password']
+
+    path_of_this_file = os.path.dirname(os.path.realpath(__file__))
+    os.chdir(path_of_this_file)
+    # try:
+    #     os.mkdir(email_md_folder_name)
+    # except:
+    #     os.chdir(email_md_folder_name)
+    #     for file in os.listdir():
+    #         os.remove(file)
+    #         os.removedirs(email_md_folder_name)
+    #         os.mkdir(email_md_folder_name)
+
+    # NASA_UTILS.print_log("init pop3 connection")  
+    mail = mailbox(email_id, email_pw)
+
+    mail.pop3_connected = False
+    mail.__connect_pop3__()
+    all_mail_list = mail.conn_pop3.list()[1]
+
+    # 조회할 최근 메세지 수
+    TOP_N_MESSAGE = 50
+   
+    # 메일 가져오기를 스킵할 송신인
+    pass_list = ['security@aptmail.nice.co.kr']
+
+    data_to_return = []
+
+    for i, bb in enumerate([int(aa.decode('ASCII').split(' ')[0]) for aa in all_mail_list[-1*TOP_N_MESSAGE:]]):
+            # list 에서 나오는 id는 index 로 uniqueness 를 보장하지 않음
+            # 따라서 최근 N개를 가져온 이후 UID 대조 필요
+
+            with open(f"{email_md_folder_name}/tmp_{i}.md", 'w', encoding='utf-8') as f:
+        
+                (server_msg, body, octets) = mail.conn_pop3.retr(bb)
+
+                msg = email.message_from_bytes(b'\n'.join(body))
+
+                re_parsed = {}
+
+                re_parsed['subject'] = NASA_UTILS.try_decode(msg['subject'])
+                re_parsed['from'] = get_markup_tag(msg['FROM'])
+                re_parsed['to'] = get_markup_tag(msg['TO'])
+                re_parsed['cc'] = get_markup_tag(msg['CC'])
+                re_parsed['date'] = msg['Date']
+                re_parsed['body'] = remove_multiple_spaces(clean_markup(NASA_UTILS.parse_orig_text(msg, google=True)).replace('> ', ''))
+
+                data_to_return.insert(0, {
+                    "subject" : re_parsed['subject'],
+                    "from" : re_parsed['from'],
+                    "date" : re_parsed['date']
+                })
+
+                f.write("-----start of a email-----")
+                if re_parsed['from'] not in pass_list:
+                    for k in ['subject', 'from', 'to', 'cc', 'date', 'body']:
+                        f.write(f"<{k}>\n{re_parsed[k]}\n\n\n")
+                f.write("-----end of a email-----")
+
+    mail.conn_pop3.close()
+        
+    return data_to_return
+
+@app.post("/load-share/")
+async def load_share(request: Request):
+    form = await request.form()
+    access_token = form['accessToken']
+    login_id = form['loginId']
+
+    data_to_return = {}
+    return data_to_return
+    
+@app.post("/post-calender/")
+async def post_calender(request: Request):
+    form = await request.form()
+    email_index = form['index']
+    email_date = form['date']
+    email_from = form['from']
+    
+    filename = f'tmp_{email_index}.md'
+    body_content = read_markdown_tag(filename, 'body')
+    os.chdir(os.path.dirname(os.getcwd()))
+
+    if body_content:
+        print()
+
+    response = post_calender_openai(body_content).replace('\n', '').replace(' ','').replace('```json','').replace('```','')
+    
+    data = json.loads(response)
+    print(data)
+    make_event(data['summary'], data['location'], data['dateTime'], email_from)
+
+    return data
 
