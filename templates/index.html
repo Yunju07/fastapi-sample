@@ -15,7 +15,7 @@
             <ul>
                 <li class="sub-menu" onclick="openModal('share-modal')">Confluence</li>
                 <li class="sub-menu" onclick="openModal('email-modal')">Email</li>
-                <li class="sub-menu" onclick="openModal('calendar-modal')">Calender</li>
+                <li class="sub-menu" onclick="openModal('calendar-modal')">Google Calendar</li>
             </ul>
         </div>
         <div class="menu-item">
@@ -23,9 +23,8 @@
             <ul>
                 <li class="sub-menu" onclick="openModal('file-upload-modal')">문서번역</li>
                 <li class="sub-menu" onclick="openModal('report-draft-modal')">보고서 초안 작성</li>
-                <li class="sub-menu">회의록 초안 작성</li>
+                <li class="sub-menu" onclick="openModal('minutes-draft-modal')">회의록 초안 작성</li>
                 <li class="sub-menu" onclick="openModal('meeting-schedule-modal')">미팅 일정 생성</li>
-                <li class="sub-menu">이메일 초안 작성</li>
             </ul>
         </div>
     </div>
@@ -65,7 +64,9 @@
     <div id="calendar-modal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('calendar-modal')">&times;</span>
-            <h2>Calendar</h2>
+            <h2>Google Calendar</h2>
+            <label for="google-id">구글 계정 아이디</label><br>
+            <input type="text" id="google-id" name="google-id"><br><br>
             <br><br>
             <button id="save-button" onclick="saveCalendar()">Save</button>
         </div>
@@ -75,7 +76,7 @@
             <span class="close" onclick="closeModal('file-upload-modal')">&times;</span>
             <h2>문서 번역기</h2>
             <h4>파일 업로드</h4>
-            <input type="file" id="file-upload" name="file-upload" accept=".txt, .pdf, .doc, .docx"><br>
+            <input type="file" id="translate-file-upload" name="file-upload" accept=".txt, .pdf, .doc, .docx"><br>
             <h4>번역할 언어</h4>
             <select id="language-select">
                 <option value="en">영어</option>
@@ -93,6 +94,7 @@
             <div class="share-link-input-container">
                 <input type="text" id="share-link" name="share-link" placeholder="링크를 입력하세요">
                 <button id="arrow-button" onclick="checkConfluenceInfo()">↑</button>
+                <div class="page-titles-container" id="page-titles-container"></div>
             </div>
             <h4>E-mail</h4>
             <div style="display: flex; align-items: center;">
@@ -105,11 +107,35 @@
                 </select>
             </div>
             <h4>파일 업로드</h4>
-            <input type="file" id="file-upload" name="file-upload" accept=".txt, .pdf, .doc, .docx"><br><br><br>
+            <input type="file" id="report-file-upload" name="file-upload" accept=".txt, .pdf, .doc, .docx"><br><br><br>
             <button id="save-button" onclick="draftReport()">Upload</button>
         </div>
     </div>
-
+    <div id="minutes-draft-modal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('minutes-draft-modal')">&times;</span>
+            <h2>회의록 초안 작성</h2>
+            <h4>Share 페이지</h4>
+            <div class="share-link-input-container">
+                <input type="text" id="share-link" name="share-link" placeholder="링크를 입력하세요">
+                <button id="arrow-button" onclick="checkConfluenceInfo()">↑</button>
+                <div class="page-titles-container" id="page-titles-container"></div>
+            </div>
+            <h4>E-mail</h4>
+            <div style="display: flex; align-items: center;">
+                <button onclick="checkEmailInfo('report-email-select')">이메일 불러오기</button>
+                <span style="font-size: smaller; font-weight: normal; color: #888; margin-left: 10px;">최신 50개의 메일을 가져옵니다</h4>
+            </div>
+            <div id="minutes-email-list" class="email-list">
+                <select id="minutes-email-select" class="email-select" onchange="selectEmail()">
+                    <option value="-1">이메일 선택</option>
+                </select>
+            </div>
+            <h4>파일 업로드</h4>
+            <input type="file" id="minutes-file-upload" name="file-upload" accept=".txt, .pdf, .doc, .docx"><br><br><br>
+            <button id="save-button" onclick="draftMinutes()">Upload</button>
+        </div>
+    </div>
     <div id="meeting-schedule-modal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('meeting-schedule-modal')">&times;</span>
@@ -136,8 +162,10 @@
 
     <script>
         var emails = [];
+        var share_page = [];
         async function sendMessage() {
             var userInput = document.getElementById('user-input').value;
+            console.log(userInput)
             if (userInput.trim() !== '') {
                 var chatBox = document.getElementById('chat-box');
                 var userMessageContainer = document.createElement('div');
@@ -161,27 +189,31 @@
                 chatBox.scrollTop = chatBox.scrollHeight;
 
                 document.getElementById('user-input').value = '';
-                
-                // http post 요청
-                fetch('/send-message/', {
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ text: userInput })
-                })
-                .then(handleServerError) // 서버 오류를 처리하는 함수 연결
-                .then(response => response.json())
-                .then(data => {
+
+                var formData = new FormData();
+                formData.append('text', userInput);
+
+                try {
+                    // http post 요청
+                    const response = await fetch('/send-message/', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    if (!response.ok) {
+                        handleServerError(response)
+                    }
+
+                    const data = await response.json();
                     if('image' in data) {
                         displayImage(data.image, data.message+'\n\n')
                     }
                     else{
                         displayMessage(data.message);
-                    }                  
-                })
-                .catch(error => {
+                    } 
+                    print(data)
+                } catch (error) {
                     console.error('네트워크 오류:', error); 
-                });
+                }
 
                 chatBox.removeChild(waitingMessageContainer);
             }
@@ -280,12 +312,13 @@
         
         // 기능 함수
         // 쉐어 불러오기
-        async function loadShare(){
+        async function loadShare(shareLink){
             var accessToken = document.getElementById('access-token').value.trim();
             var loginAccount = document.getElementById('login-account').value.trim();
             var formData = new FormData();
             formData.append('accessToken', accessToken);
             formData.append('loginAccount', loginAccount);
+            formData.append('shareLink', shareLink);
 
             try {
                 const response = await fetch('/load-share/', {
@@ -295,10 +328,11 @@
                 if (!response.ok) {
                     handleServerError(response)
                 }
-                const emails = await response.json();
+                    const pages = await response.json();
+                    displayPageTitles(pages)
 
                 } catch (error) {
-                console.error('이메일 불러오기 오류:', error);
+                console.error('쉐어 페이지 불러오기 오류:', error);
             }
         }
         function checkConfluenceInfo() {
@@ -308,17 +342,32 @@
                 alert("컨플루언스 정보를 입력하세요.")
                 return;        
             }
-            loadShare();
+            var shareLink = document.getElementById('share-link').value;
+            
+            loadShare(shareLink);
         }
-        
+        function displayPageTitles(pages) {
+            share_page = []
+            var pageTitlesContainer = document.getElementById('page-titles-container');
+            pageTitlesContainer.innerHTML = ''; 
+            pages.forEach((page, index) => {
+                var pageTitleBox = document.createElement('div');
+                share_page.push(page)
+                pageTitleBox.textContent = page.title;
+                pageTitleBox.classList.add('page-title-box'); 
+                pageTitlesContainer.appendChild(pageTitleBox);
+            });
+        }
+
         // 문서 번역
         async function translateUploadFile() {
-            var fileInput = document.getElementById('file-upload');
+            var fileInput = document.getElementById('translate-file-upload');
             var file = fileInput.files[0];
             var language = document.getElementById('language-select').value;
             
             // 모달 닫기
             closeModal('file-upload-modal');
+            console.log(file);
 
             if (file) {
                 var chatBox = document.getElementById('chat-box');
@@ -354,9 +403,19 @@
                     });
                     if (!response.ok) {
                         handleServerError(response)
+                    }else{
+                        const filename = response.headers.get('Content-Disposition').split('filename=')[1];
+                        const blob = await response.blob();
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename;
+                        a.style.display = 'none';
+                        document.body.appendChild(a);
+                        console.log(url);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
                     }
-                    const data = await response.json();
-                    displayMessageWithDownloadLink("번역이 완료되었습니다", data.download_url);
                 } catch (error) {
                     console.error('네트워크 오류:', error); 
                 }
@@ -430,29 +489,103 @@
         async function draftReport(){
             var formData = new FormData();
             
-            // 컨플루언스
-            var shareLink = document.getElementById('share-link');
-            
             // 이메일 
-            var emailSelect = document.getElementById('meething-email-select');
+            var emailSelect = document.getElementById('report-email-select');
             var selectIndex = emailSelect.value;
-            
             if(selectIndex != "-1"){
                 const selectedEmail = emails[parseInt(selectIndex)];
                 formData.append('emailIndex', 49 - parseInt(selectIndex));
+                formData.append('emailTitle', emails[selectIndex].subject)
+            }
+            // 파일
+            var fileInput = document.getElementById('report-file-upload');
+            var file = fileInput.files[0];
+            if(file){
+                formData.append('file', file);
             }
 
-            // 파일
-            var fileInput = document.getElementById('file-upload');
-            var file = fileInput.files[0];
+            // 컨플루언스
+            if(share_page.length){
+                formData.append('share', share_page.length);
+            }
 
-            if(selectIndex == "-1" && file == undefined){
+            if(share_page.length == 0 && selectIndex == "-1" && file == undefined){
                 alert("하나 이상의 입력을 작성해주세요.")
                 return
             }
-            console.log(shareLink);
-            console.log(selectIndex);
-            console.log(file);
+            var shareLink = document.getElementById('share-link').value;
+            var accessToken = document.getElementById('access-token').value.trim();
+            formData.append('shareLink', shareLink)
+            formData.append('accessToken', accessToken)
+
+            closeModal('report-draft-modal')
+
+            var chatBox = document.getElementById('chat-box');
+            var messageContainer = document.createElement('div');
+            messageContainer.classList.add('message-container', 'bot-message-container');
+            
+            var messageBubble = document.createElement('div');
+            messageBubble.classList.add('message-bubble', 'bot-message-bubble');
+            messageBubble.textContent = "보고서 초안을 작성하고 있습니다";
+
+            messageContainer.appendChild(messageBubble);
+            chatBox.appendChild(messageContainer);
+
+            // 대기 중인 메시지를 표시
+            var waitingMessageContainer = document.createElement('div');
+            waitingMessageContainer.id = 'waiting-message';
+            waitingMessageContainer.classList.add('message-container', 'waiting-message-bubble');
+            waitingMessageContainer.innerHTML = '<div id="spinner"></div>';
+            chatBox.appendChild(waitingMessageContainer);
+
+            // 스크롤을 항상 최하단으로 조정
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                // http post 요청
+                const response = await fetch('/draft-report/', {
+                    method: 'POST',
+                    body: formData
+                });
+                if (!response.ok) {
+                    handleServerError(response)
+                }
+                const data = await response.json();
+                title = data.title
+                link = data.link
+
+                var chatBox = document.getElementById('chat-box');
+                var titleContainer = document.createElement('div');
+                titleContainer.classList.add('message-container', 'bot-message-container');
+                
+                var titleBubble = document.createElement('div');
+                titleBubble.classList.add('message-bubble', 'bot-message-bubble');
+                titleBubble.textContent = "title: "+title;
+
+                var linkContainer = document.createElement('div');
+                linkContainer.classList.add('message-container', 'bot-message-container');
+
+                var linkBubble = document.createElement('a');
+                linkBubble.classList.add('message-bubble', 'bot-message-bubble');
+                linkBubble.textContent = link;
+                linkBubble.href = link;
+
+                titleContainer.appendChild(titleBubble);
+                linkContainer.appendChild(linkBubble);
+                chatBox.appendChild(titleContainer);
+                chatBox.appendChild(linkContainer);
+
+            } catch (error) {
+                console.error('네트워크 오류:', error); 
+            }
+
+            // 스크롤을 항상 최하단으로 조정
+            chatBox.scrollTop = chatBox.scrollHeight;
+            // 대기 중인 메시지가 있으면 삭제
+            var waitingMessage = document.getElementById('waiting-message');
+            if (waitingMessage) {
+                chatBox.removeChild(waitingMessage);
+            }
         }
 
         // 이메일 불러오기
