@@ -786,11 +786,11 @@ async def draft_report(request: Request):
         token=access_token
     )
 
-    status = confluence.update_or_create(parent_id=share_page_id, title=response['title'], body=body,representation='wiki', full_width=False, )
+    status = confluence.update_or_create(parent_id=share_page_id, title=response['title'], body=body,representation='wiki', full_width=False)
     page_link = 'https://share.nice.co.kr'+status['_links']['webui'] 
 
     data_to_return = {
-        'title' : title,
+        'title' : response['title'],
         'link' : page_link
     }
 
@@ -816,6 +816,8 @@ def draft_report_openai(data):
     - Include the title of input file as the source in your content
     - The report contents are written in four parts: background, status, proposal, and conclusion
     - Responses must be written in Korean
+    - Strictly match the json format and remove all spaces except for the content of “content” field
+ 
 
     title:
     content:{{
